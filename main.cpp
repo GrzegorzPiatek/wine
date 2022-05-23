@@ -27,8 +27,21 @@ int myRank;
 int maxRank;
 int myTime;
 
+void sendMsg(int destination, Tag tag, int wineAmount){
+    Msg msg {
+        .tag = tag,
+        .time = myTime,
+        .wine = wineAmount
+    };
+    MPI_Send(&msg, sizeof(Msg), MPI_BYTE, dst, 0, MPI_COMM_WORLD);
+
+}
+
+
 int main(int argc, char const *argv[])
 {
     
+
+
     return 0;
 }
