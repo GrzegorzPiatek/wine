@@ -1,18 +1,23 @@
 #include "main.hpp"
 
 
-enum Tag {REQ, ACK};
+enum Tag {
+        REQ, 
+        ACK,
+        SREQ //Student request for wine
+    };
 
 struct Msg {
     Tag tag;
-    int time;
+    int clock;
+    int studentRank;
 };
 
 
-int const WINE_MAKERS = 5;
-int const STUDENTS = 5;
+int const WINE_MAKERS = 1;
+int const STUDENTS = 1;
 
-int const SAFE_PLACES = 4;
+int const SAFE_PLACES = 2;
 
 int const MIN_ACK = WINE_MAKERS - SAFE_PLACES;
 
@@ -22,34 +27,46 @@ int const MIN_WINE = 1;
 int const MIN_TIME_WAIT = 500; // ms 
 int const MAX_TIME_WAIT = 1500; //ms
 
-int myTime = 0;
+int myClock = 0;
 int myRank;
+int maxRank = WINE_MAKERS + STUDENTS;
 
 MPI_Request request = {0};
 MPI_Status status = {0};
 
-void tick(int newTime = 0){
-    myTime = std::max(newTime, myTime) + 1;
+
+void debug(Msg &msg, char* info){
+    printf("[%d] %s tag:%d \n", myRank, info, msg.tag);
 }
 
-void sendMsg(int destination, Tag tag){
+
+void tick(int newClock = 0){
+    myClock = std::max(newClock, myClock) + 1;
+}
+
+void sendMsg(int destination, Tag tag, int studentRank=0){
+
     Msg msg {
         .tag = tag,
-        .time = myTime
+        .clock = myClock,
+        .studentRank = studentRank
     };
+    char * info = "Send";
+    sprintf(info, "%d", destination);
+    debug(msg, info);
     MPI_Send(&msg, sizeof(Msg), MPI_BYTE, destination, 0, MPI_COMM_WORLD);
-
 }
 
-bool recvMsgWait(int *source, Msg *msg){
+bool recvMsgWait(int *source, Msg *msg, int mpiTag = MPI_ANY_TAG){
     MPI_Recv(msg,
         sizeof(Msg),
         MPI_BYTE,
         MPI_ANY_SOURCE,
-        MPI_ANY_TAG,
+        mpiTag,
         MPI_COMM_WORLD,
         &status
     );
+    debug(*msg, "Recv");
     int completed;
 	MPI_Test(&request, &completed, &status);
     if(!completed)
@@ -67,6 +84,7 @@ bool recvMsgNoWait(int *source, Msg *msg){
         MPI_COMM_WORLD,
         &request
     );
+    debug(*msg, "Recv");
     int completed;
 	MPI_Test(&request, &completed, &status);
     if(!completed)
@@ -75,27 +93,48 @@ bool recvMsgNoWait(int *source, Msg *msg){
         return true;
 }
 
-void consumeTime(){
+void consumeClock(){
     usleep(rand() % (MAX_TIME_WAIT - MIN_TIME_WAIT) + MIN_TIME_WAIT);
 }
 
 void students(){
     while(true){
-        consumeTime();
+        consumeClock();
         for(int i = 0; i < WINE_MAKERS; i++){
             sendMsg(i, REQ);
         }
         int source;
         Msg msg;
         recvMsgWait(&source, &msg);
+        sendFackOffToTheRestOFWineMakers();
     }
+}
+
+
+void sendFackOffToTheRestOFWineMakers(){
+    for(int i = 0; i < WINE_MAKERS; i++){
+        if(i != myRank)
+            sendMsg(i, ACK);
+    }
+}
+
+
+// @TODO
+int getStudent(){
+    int studentRank = 0;
+    Msg msg;
+
+    while(!studentRank)
+        recvMsgWait(&studentRank,&msg, SREQ);
+        
+    return studentRank; 
 }
 
 void wineMakers(){
     while(true){
         // produkujemy wino
-        consumeTime();
-        
+        consumeClock();
+        int myStudentRank = getStudent();
         //wyslij ze chcesz sie wymieniac
         for(int i = 0; i < WINE_MAKERS; i++){
             if(i != myRank)
@@ -108,34 +147,57 @@ void wineMakers(){
             int source;
             Msg msg;
             recvMsgWait(&source, &msg);
-            if(msg.tag = ACK)
+            if(msg.tag = ACK){
                 ackCounter++;
+                continue;
+            }
+            
+            if(msg.clock < myClock){
+                sendMsg(source, ACK);
+                if(msg.studentRank == myStudentRank){
+                    myStudentRank = getStudent();
+                }
+            }
+            else{ //msg.clock >= myClock
+                ackCounter++;
+            }
+            tick(msg.clock);
         }
 
         // mamy bezpieczne miejsce
-        // @TOD WYMIANA
+        // sendMsg();
 
-
-        //odpowiedz innym winiarzom
-        for(int i = 0; i < WINE_MAKERS; i++){
-            int source;
-            Msg msg;
-            if(recvMsgNoWait(&source, &msg)){
-                if(msg.time < myTime){
-                    sendMsg(source, ACK);
-                    tick();
-                }
-                else{
-                    tick(msg.time);
-                }
-            }
-        }
+        // //odpowiedz innym winiarzom
+        // for(int i = 0; i < WINE_MAKERS; i++){
+        //     int source;
+        //     Msg msg;
+        //     if(recvMsgNoWait(&source, &msg)){
+        //         if(msg.clock < myClock){
+        //             sendMsg(source, ACK);
+        //             tick();
+        //         }
+        //         else{
+        //             tick(msg.clock);
+        //         }
+        //     }
+        // }
     }
 }
 
 
-int main(int argc, char const *argv[])
+int main(int argc, char *argv[])
 {
+    MPI_Init(&argc, &argv);
+	MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
+	MPI_Comm_size(MPI_COMM_WORLD, &maxRank);
 
+    printf("INIT [%d] \n", myRank);
+
+    if(myRank < WINE_MAKERS)
+        wineMakers();
+    else
+        students();    
+
+	MPI_Finalize();
     return 0;
 }
