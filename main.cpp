@@ -35,7 +35,7 @@ MPI_Request request = {0};
 MPI_Status status = {0};
 
 
-void debug(Msg &msg, char* info){
+void debug(Msg msg, const char* info){
     printf("[%d] %s tag:%d \n", myRank, info, msg.tag);
 }
 
@@ -45,7 +45,7 @@ void tick(int newClock = 0){
 }
 
 void sendMsg(int destination, Tag tag, int studentRank=0){
-
+    tick();
     Msg msg {
         .tag = tag,
         .clock = myClock,
@@ -106,7 +106,8 @@ void students(){
         int source;
         Msg msg;
         recvMsgWait(&source, &msg);
-        sendFackOffToTheRestOFWineMakers();
+        // wyślij NO do reszty winiarzy();
+        //może pierwszy lepszy winiarz wchodzi a do pozostałych wysyłamy accept denied
     }
 }
 
@@ -158,14 +159,16 @@ void wineMakers(){
                     myStudentRank = getStudent();
                 }
             }
-            else{ //msg.clock >= myClock
+            else{ //msg.clock >= myClock // co z == ? powstaje konflikt oba nie wchodzą ? oba wchodzą? 
                 ackCounter++;
             }
-            tick(msg.clock);
+            tick(msg.clock); // czy my to zwiększamy tutaj
+            //po odebraniu większego lamporta czy jak dostaniemy
+            //nasze ack to ustawiamy lamporta na największego
+            //jakiego dostaliśµuy podczas zbierania ACK
         }
-
         // mamy bezpieczne miejsce
-        // sendMsg();
+        // sendMsg(); 
 
         // //odpowiedz innym winiarzom
         // for(int i = 0; i < WINE_MAKERS; i++){
