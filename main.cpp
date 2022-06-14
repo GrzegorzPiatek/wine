@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <algorithm>
-
+#include <vector>
 
 enum Tag {
         REQ, 
@@ -11,11 +11,16 @@ enum Tag {
         SREQ //Student request for wine
     };
 
+enum STATUS {
+    WAITING_FOR_SAFEPLACE,
+    IN_SAFEPLACE
+};
+
+
 struct Msg {
     Tag tag;
     int clock;
     int studentRank;
-    int source;
 };
 
 int isDebugOn = 0;
@@ -27,23 +32,22 @@ int const SAFE_PLACES = 1;
 
 int const MIN_ACK = WINE_MAKERS - SAFE_PLACES;
 
-int const MAX_WINE = 10;
-int const MIN_WINE = 1;
-
-int const MIN_TIME_WAIT = 500; // ms 
-int const MAX_TIME_WAIT = 1500; //ms
+int const MIN_TIME_WAIT = 1; 
+int const MAX_TIME_WAIT = 2; 
 
 int myClock = 0;
 int myRank;
-int maxRank = WINE_MAKERS + STUDENTS;
+int maxRank = WINE_MAKERS;
 
-MPI_Request request = {0};
-MPI_Status status = {0};
+pthread_t commThread;
 
-char whoAmI;
+int wineMakerStatus = 0;
+
+std::vector<int> requestingWineMakers;
+
 
 void debug(Msg msg, const char* info){
-    printf("%c[%d] <%d> %s tag:%d \n", whoAmI, myRank,myClock, info, msg.tag);
+    printf("[%d] <%d> %s tag:%d \n", myRank,myClock, info, msg.tag);
 }
 
 
@@ -56,107 +60,120 @@ void sendMsg(int destination, Tag tag, int studentRank=0){
     Msg msg {
         .tag = tag,
         .clock = myClock,
-        .studentRank = studentRank,
-        .source = myRank
+        .studentRank = studentRank
     };
-    if (isDebugOn) printf("%c[%d] <%d> Wysylam do [%d] tag=%d\n", whoAmI,myRank,myClock, destination, tag );
+    //printf("[%d] <%d> Wysylam do [%d] tag=%d\n",myRank,myClock, destination, tag );
     MPI_Send(&msg, sizeof(Msg), MPI_BYTE, destination, tag, MPI_COMM_WORLD);
 }
 
 
-void recvMsgWait(int *source, Msg *msg, int mpiTag = MPI_ANY_TAG){
-    if (isDebugOn) printf("Czekam na wiadomosc z tag= %d \n", mpiTag);
-    MPI_Recv(msg, sizeof(Msg), MPI_BYTE, MPI_ANY_SOURCE, mpiTag, MPI_COMM_WORLD, &status);
-    *source = msg->source;
-    if (isDebugOn) printf("%c[%d] <%d> Odebralem od [%d] <%d> tag=%d\n", whoAmI,myRank,myClock, *source, msg->clock, msg->tag);
-}
-
-
 void consumeTime(){    
-    sleep( (rand() % (MAX_TIME_WAIT - MIN_TIME_WAIT) + MIN_TIME_WAIT));
-}
-
-
-void students(){
-    while(true){
-        consumeTime();
-        int source;
-        Msg msg;
-        printf("%c[%d] Czekam na wino\n", whoAmI, myRank);
-        recvMsgWait(&source, &msg, ACK);
-        if (isDebugOn) printf("%c[%d] Wysylam winiarzowi ACK\n", whoAmI, myRank);
-        sendMsg(source, ACK);
-    }
+    sleep(2);// (rand() % (MAX_TIME_WAIT - MIN_TIME_WAIT) + MIN_TIME_WAIT));
 }
 
 
 int getStudent(){
-
+    srandom(myRank);
     int studentRank = rand()%((STUDENTS + WINE_MAKERS)-WINE_MAKERS) + WINE_MAKERS;
-    printf("%c[%d] <%d> Ubiegam sie o studenta: %d\n", whoAmI, myRank,myClock, studentRank);
+    printf("[%d] <%d> Ubiegam sie o studenta: %d\n", myRank,myClock, studentRank);
     return studentRank; 
 }
+
+int countAck(int *ackList){
+    int sum = 0;
+    for (int i =0; i< WINE_MAKERS; i++){
+        sum += ackList[i];
+    }
+    return sum;
+}
+
+void addAck(int *ackList, int newAckRank){
+    ackList[newAckRank] = 1;
+}
+
+void clearAck(int *ackList){
+    for(int i = 0; i< WINE_MAKERS; i++)
+        ackList[i]=0;
+}
+
+void *communication(void *cos){
+    Msg msg;
+    int ackList[WINE_MAKERS] = {0};
+    bool isRecvClockSmaller;
+    MPI_Status status;
+    while(true)
+    {
+        if(wineMakerStatus == WAITING_FOR_SAFEPLACE){
+            MPI_Recv(&msg, sizeof(Msg), MPI_BYTE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+            
+            isRecvClockSmaller = msg.clock < myClock;
+            int oldClock = myClock;
+            tick(msg.clock);
+            
+            switch (status.MPI_TAG)
+            {
+            case REQ:
+                if(isRecvClockSmaller || ((oldClock == msg.clock) && (status.MPI_SOURCE < myRank))){
+                    // nowy student? 
+                    printf("[%d] <%d> Wiadomosc to REQ wiec wysylam ACK bo jestem gorszy od [%d] <%d>\n", myRank,myClock, status.MPI_SOURCE, msg.clock);
+                    sendMsg(status.MPI_SOURCE, ACK);
+                    printf("[%d] <%d> Wysyłam ACK do [%d]\n", myRank,myClock, status.MPI_SOURCE); // debug
+                }
+                else if(wineMakerStatus == WAITING_FOR_SAFEPLACE){
+                    printf("[%d] <%d> Dodaje do oczekujacych winiarza: [%d]\n", myRank,myClock, status.MPI_SOURCE); // debug
+                    requestingWineMakers.push_back(status.MPI_SOURCE);
+                }
+                break;
+            case ACK:
+                addAck(ackList, status.MPI_SOURCE);
+                printf("[%d] <%d> Otrzymałem ACK do [%d]\n", myRank,myClock, status.MPI_SOURCE); // debug
+                if(countAck(ackList) == MIN_ACK){
+                    wineMakerStatus = IN_SAFEPLACE;
+                    clearAck(ackList);
+                }
+                break;
+            
+            default:
+                break;
+            }
+        }
+        // else{
+        //     MPI_Recv(&msg, sizeof(Msg), MPI_BYTE, MPI_ANY_SOURCE, ACK, MPI_COMM_WORLD, &status);
+        //     tick(msg.clock);
+        // }
+    }
+}
+
 
 void wineMakers(){
     while(true){
         // produkujemy wino
         consumeTime();
-        printf("%c[%d] <%d> Wyprodukowalem wino, ubiegam sie o bezpieczne miejsce\n", whoAmI, myRank,myClock);
-        int myStudentRank = getStudent();
+        wineMakerStatus = WAITING_FOR_SAFEPLACE;
+        printf("[%d] <%d> Wyprodukowalem wino, ubiegam sie o bezpieczne miejsce\n", myRank,myClock);
+        //int myStudentRank = getStudent();
         //wyslij ze chcesz sie wymieniac
         for(int i = 0; i < WINE_MAKERS; i++){
             if(i != myRank)
-                sendMsg(i, REQ, myStudentRank);
+                sendMsg(i, REQ);
         }
-        
-        // czekaj na akceptacje od innych winiarzy
-        int ackCounter = 0;
-        while(ackCounter < MIN_ACK){
-            //printf("%c[%d] <%d> ACK counter: %d\n", whoAmI, myRank,myClock, ackCounter);
-            int source;
-            Msg msg;
-            recvMsgWait(&source, &msg);
-            if(msg.tag == ACK){
-                ackCounter++;
-                continue;
-            }
-            
-            if(msg.clock < myClock){
-                sendMsg(source, ACK);
-                // if(msg.studentRank == myStudentRank){
-                //     myStudentRank = getStudent();
-                //     ackCounter = 0;
-                // }
-                tick(msg.clock);
-                continue;
-            }
 
-            if (msg.clock == myClock){ 
-                if (source < myRank){
-                    sendMsg(source, ACK);
-                    // if(msg.studentRank == myStudentRank){
-                    //     myStudentRank = getStudent();
-                    //     ackCounter = 0;
-                    // }
-                }
-                tick(msg.clock);
-                continue;
-            }
-            // else{
-            //     ackCounter++;
-            // }
+        while(wineMakerStatus == WAITING_FOR_SAFEPLACE) rand();
+
+        printf("%d <%d> Mam bezpieczne miejsce => WYMIANA\n", myRank, myClock);
+        consumeTime();
+        printf("[%d] <%d> Nastapila wymiana. Zwalniam bezpieczne miejsce\n", myRank,myClock);
+        for(int rank : requestingWineMakers){
+            sendMsg(rank, ACK);
         }
-        // mamy bezpieczne miejsce
-//        if (isDebugOn) 
-        printf("%d <%d> Mam bezpieczne miejsce i studenta: %d => WYMIANA\n", myRank, myClock, myStudentRank);
-        Msg msg;
-        sleep(2);
-        sendMsg(myStudentRank, ACK); 
-        MPI_Recv(&msg, sizeof(Msg), MPI_BYTE, myStudentRank, ACK, MPI_COMM_WORLD, &status);
-        printf("%c[%d] <%d> Nastapila wymiana. Zwalniam bezpieczne miejsce\n", whoAmI, myRank,myClock);
+        requestingWineMakers.clear();
     }
 }
 
+void finalize() {
+    pthread_join(commThread, NULL);
+    MPI_Finalize();
+}
 
 int main(int argc, char *argv[])
 {
@@ -164,20 +181,13 @@ int main(int argc, char *argv[])
 	MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
 	MPI_Comm_size(MPI_COMM_WORLD, &maxRank);
 
-    if (argc > 1) 
-        isDebugOn = 1;
+    
+    printf("INIT [%d] \n", myRank);
+    pthread_create(&commThread, NULL, communication, 0);
+    wineMakers();
 
-    if(myRank < WINE_MAKERS){
-        whoAmI = 'W';
-        printf("%c INIT [%d] \n",whoAmI, myRank);
-        wineMakers();
-    }
-    else{
-        whoAmI = 'S';
-        printf("%c INIT [%d] \n",whoAmI, myRank);
-        students();
-    }
 
-	MPI_Finalize();
+	finalize();
     return 0;
+
 }
