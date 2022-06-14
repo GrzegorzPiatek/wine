@@ -14,10 +14,10 @@ struct Msg {
 };
 
 
-int const WINE_MAKERS = 1;
-int const STUDENTS = 1;
+int const WINE_MAKERS = 2;
+int const STUDENTS = 2;
 
-int const SAFE_PLACES = 2;
+int const SAFE_PLACES = 1;
 
 int const MIN_ACK = WINE_MAKERS - SAFE_PLACES;
 
@@ -52,12 +52,13 @@ void sendMsg(int destination, Tag tag, int studentRank=0){
         .studentRank = studentRank
     };
     char * info = "Send";
-    sprintf(info, "%d", destination);
+    //sprintf(info, "%d", destination);
     debug(msg, info);
     MPI_Send(&msg, sizeof(Msg), MPI_BYTE, destination, 0, MPI_COMM_WORLD);
 }
 
 bool recvMsgWait(int *source, Msg *msg, int mpiTag = MPI_ANY_TAG){
+    printf("Wait for msg with tag: %d \n", mpiTag);
     MPI_Recv(msg,
         sizeof(Msg),
         MPI_BYTE,
@@ -66,7 +67,7 @@ bool recvMsgWait(int *source, Msg *msg, int mpiTag = MPI_ANY_TAG){
         MPI_COMM_WORLD,
         &status
     );
-    debug(*msg, "Recv");
+    // debug(*msg, "Recv");
     int completed;
 	MPI_Test(&request, &completed, &status);
     if(!completed)
@@ -84,7 +85,7 @@ bool recvMsgNoWait(int *source, Msg *msg){
         MPI_COMM_WORLD,
         &request
     );
-    debug(*msg, "Recv");
+    // debug(*msg, "Recv");
     int completed;
 	MPI_Test(&request, &completed, &status);
     if(!completed)
@@ -93,49 +94,40 @@ bool recvMsgNoWait(int *source, Msg *msg){
         return true;
 }
 
-void consumeClock(){
-    usleep(rand() % (MAX_TIME_WAIT - MIN_TIME_WAIT) + MIN_TIME_WAIT);
+void consumeTime(){
+    usleep(1000000 ); // rand() % (MAX_TIME_WAIT - MIN_TIME_WAIT) + MIN_TIME_WAIT);
 }
 
 void students(){
     while(true){
-        consumeClock();
+        consumeTime();
+        printf("Wytrzezwialem, wysylam req o wino\n");
         for(int i = 0; i < WINE_MAKERS; i++){
-            sendMsg(i, REQ);
+            sendMsg(i, SREQ);
         }
         int source;
         Msg msg;
+        printf("Czekam na wino\n");
         recvMsgWait(&source, &msg);
-        // wyślij NO do reszty winiarzy();
-        //może pierwszy lepszy winiarz wchodzi a do pozostałych wysyłamy accept denied
     }
 }
 
 
-void sendFackOffToTheRestOFWineMakers(){
-    for(int i = 0; i < WINE_MAKERS; i++){
-        if(i != myRank)
-            sendMsg(i, ACK);
-    }
-}
-
-
-// @TODO
 int getStudent(){
     int studentRank = 0;
     Msg msg;
-
-    while(!studentRank)
-        recvMsgWait(&studentRank,&msg, SREQ);
-        
+    printf("Czekam na spragnionego studenta\n");
+    recvMsgWait(&studentRank,&msg, SREQ);
+    printf("Znalazlem chetnego studenta z rank: %d\n", studentRank);
     return studentRank; 
 }
 
 void wineMakers(){
     while(true){
         // produkujemy wino
-        consumeClock();
-        int myStudentRank = getStudent();
+        consumeTime();
+        printf("Mam wino\n");
+        int myStudentRank = 2; //getStudent();
         //wyslij ze chcesz sie wymieniac
         for(int i = 0; i < WINE_MAKERS; i++){
             if(i != myRank)
@@ -145,6 +137,7 @@ void wineMakers(){
         // czekaj na akceptacje od innych winiarzy
         int ackCounter = 0;
         while(ackCounter < MIN_ACK){
+            consumeTime();
             int source;
             Msg msg;
             recvMsgWait(&source, &msg);
@@ -159,31 +152,22 @@ void wineMakers(){
                     myStudentRank = getStudent();
                 }
             }
-            else{ //msg.clock >= myClock // co z == ? powstaje konflikt oba nie wchodzą ? oba wchodzą? 
+            else if (msg.clock == myClock){ 
+                if (source < myRank){
+                    sendMsg(source, ACK);
+                    if(msg.studentRank == myStudentRank){
+                        myStudentRank = getStudent();
+                    }
+                }
+            }
+            else{
                 ackCounter++;
             }
-            tick(msg.clock); // czy my to zwiększamy tutaj
-            //po odebraniu większego lamporta czy jak dostaniemy
-            //nasze ack to ustawiamy lamporta na największego
-            //jakiego dostaliśµuy podczas zbierania ACK
+            tick(msg.clock);
         }
         // mamy bezpieczne miejsce
-        // sendMsg(); 
-
-        // //odpowiedz innym winiarzom
-        // for(int i = 0; i < WINE_MAKERS; i++){
-        //     int source;
-        //     Msg msg;
-        //     if(recvMsgNoWait(&source, &msg)){
-        //         if(msg.clock < myClock){
-        //             sendMsg(source, ACK);
-        //             tick();
-        //         }
-        //         else{
-        //             tick(msg.clock);
-        //         }
-        //     }
-        // }
+        printf("Mam bezpieczne miejsce i studenta: %d => WYMIANA\n", myStudentRank);
+        sendMsg(myStudentRank, ACK); 
     }
 }
 
