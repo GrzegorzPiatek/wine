@@ -11,11 +11,15 @@ struct Msg {
     Tag tag;
     int clock;
     int studentRank;
+    int source;
 };
+
 
 
 int const WINE_MAKERS = 2;
 int const STUDENTS = 2;
+
+int studentReq[2] = {0,0};
 
 int const SAFE_PLACES = 1;
 
@@ -36,7 +40,7 @@ MPI_Status status = {0};
 
 
 void debug(Msg msg, const char* info){
-    printf("[%d] %s tag:%d \n", myRank, info, msg.tag);
+    printf("<%d> [%d] %s tag:%d \n",myClock, myRank, info, msg.tag);
 }
 
 
@@ -49,54 +53,26 @@ void sendMsg(int destination, Tag tag, int studentRank=0){
     Msg msg {
         .tag = tag,
         .clock = myClock,
-        .studentRank = studentRank
+        .studentRank = studentRank,
+        .source = myRank
     };
-    char * info = "Send";
-    //sprintf(info, "%d", destination);
-    debug(msg, info);
-    MPI_Send(&msg, sizeof(Msg), MPI_BYTE, destination, 0, MPI_COMM_WORLD);
+    printf("<%d> [%d] Wysylam do [%d] tag=%d\n",myClock, myRank, destination, tag );
+    MPI_Send(&msg, sizeof(Msg), MPI_BYTE, destination, tag, MPI_COMM_WORLD);
 }
 
-bool recvMsgWait(int *source, Msg *msg, int mpiTag = MPI_ANY_TAG){
-    printf("Wait for msg with tag: %d \n", mpiTag);
-    MPI_Recv(msg,
-        sizeof(Msg),
-        MPI_BYTE,
-        MPI_ANY_SOURCE,
-        mpiTag,
-        MPI_COMM_WORLD,
-        &status
-    );
-    // debug(*msg, "Recv");
-    int completed;
-	MPI_Test(&request, &completed, &status);
-    if(!completed)
-        return false;
-    else
-        return true;
+
+void recvMsgWait(int *source, Msg *msg, int mpiTag = MPI_ANY_TAG){
+    printf("Czekam na wiadomosc z tag= %d \n", mpiTag);
+    MPI_Recv(msg, sizeof(Msg), MPI_BYTE, MPI_ANY_SOURCE, mpiTag, MPI_COMM_WORLD, &status);
+    *source = msg->source;
+    printf("<%d> [%d] Odebralem od [%d] tag=%d\n",myClock, myRank, *source, msg->tag);
 }
 
-bool recvMsgNoWait(int *source, Msg *msg){
-    MPI_Irecv(msg,
-        sizeof(Msg),
-        MPI_BYTE,
-        MPI_ANY_SOURCE,
-        MPI_ANY_TAG,
-        MPI_COMM_WORLD,
-        &request
-    );
-    // debug(*msg, "Recv");
-    int completed;
-	MPI_Test(&request, &completed, &status);
-    if(!completed)
-        return false;
-    else
-        return true;
-}
 
 void consumeTime(){
-    usleep(1000000 ); // rand() % (MAX_TIME_WAIT - MIN_TIME_WAIT) + MIN_TIME_WAIT);
+    usleep(3000000 ); // 1000 * rand() % (MAX_TIME_WAIT - MIN_TIME_WAIT) + MIN_TIME_WAIT);
 }
+
 
 void students(){
     while(true){
@@ -127,7 +103,7 @@ void wineMakers(){
         // produkujemy wino
         consumeTime();
         printf("Mam wino\n");
-        int myStudentRank = 2; //getStudent();
+        int myStudentRank = getStudent();
         //wyslij ze chcesz sie wymieniac
         for(int i = 0; i < WINE_MAKERS; i++){
             if(i != myRank)
@@ -141,7 +117,7 @@ void wineMakers(){
             int source;
             Msg msg;
             recvMsgWait(&source, &msg);
-            if(msg.tag = ACK){
+            if(msg.tag == ACK){
                 ackCounter++;
                 continue;
             }
@@ -150,20 +126,23 @@ void wineMakers(){
                 sendMsg(source, ACK);
                 if(msg.studentRank == myStudentRank){
                     myStudentRank = getStudent();
+                    ackCounter = 0;
                 }
+                tick(msg.clock);
+                continue;
             }
+
             else if (msg.clock == myClock){ 
                 if (source < myRank){
                     sendMsg(source, ACK);
                     if(msg.studentRank == myStudentRank){
                         myStudentRank = getStudent();
+                        ackCounter = 0;
                     }
                 }
+                tick(msg.clock);
+                continue;
             }
-            else{
-                ackCounter++;
-            }
-            tick(msg.clock);
         }
         // mamy bezpieczne miejsce
         printf("Mam bezpieczne miejsce i studenta: %d => WYMIANA\n", myStudentRank);
