@@ -6,7 +6,7 @@
 
 struct Msg {
     int clock;
-    int targetRank;
+    int targetOffert;
     int wine;
 };
 
