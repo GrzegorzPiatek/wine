@@ -23,3 +23,5 @@ int isDebugOn = 0;
 #define MAX_TIME_WAIT 2; 
 
 #define MAX_RANK  WINE_MAKERS + STUDENTS;
+
+#define MAX_WINE 10
