@@ -30,9 +30,9 @@ private:
 protected:
     thread *mainThread, *communicateThread;
 
-    void main();
+    void threadMain();
 
-    void communicate();
+    void threadCommunicate();
 
     void incrementAck();
 
@@ -42,13 +42,15 @@ protected:
 
     void broadcastStudents(Tag tag, int targetWineMakerRank);
 
+    void sendAck(int rank);
+
     void sleepAndSetWine();
 
     int chooseOffer();
 
     void updateOffer(int id, int wine);
 
-    bool studentReqHandler(Msg msg, int source); // return true for ACK response
+    void studentReqHandler(Msg msg, int sourceRank); // return true for ACK response
 
     void studentAckHandler(Msg msg);
 public:
@@ -57,23 +59,23 @@ public:
 
 Student::Student() {
     clock = myRank;
-    mainThread = new thread(&Student::main, this);
-    communicateThread = new thread(&Student::communicate, this);
+    mainThread = new thread(&Student::threadMain, this);
+    communicateThread = new thread(&Student::threadCommunicate, this);
 }
 
-void Student::main() {
+void Student::threadMain() {
     sleepAndSetWine();
     
 }
 
-void Student::communicate() {
+void Student::threadCommunicate() {
     Msg msg;
     while (true) {
         MPI_Recv(&msg, 1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
         
         if(status.MPI_SOURCE >= WINE_MAKERS) { // msg from student
             if(status.MPI_SOURCE == REQ) {
-                bool sendAck = studentReqHandler(msg, status.MPI_SOURCE);
+                studentReqHandler(msg, status.MPI_SOURCE);
             }
             else if (status.MPI_TAG == ACK) {
                 studentAckHandler(msg);
@@ -87,16 +89,10 @@ void Student::communicate() {
     }
 }
 
-bool Student::studentReqHandler(Msg msg, int, source) {
-    if (msg.targetOffer != myTargetOffer) {
-        return true;
-    } 
-    
-    if(clock > msg.clock || (clock = msg.clock && myRank > source)) {
-        chooseOffer(); // TODO case when requester change his mind 
-        return true;
+void Student::studentReqHandler(Msg msg, int sourceRank) {
+    if(clock > msg.clock || (clock = msg.clock && myRank > sourceRank)) {
+        
     }
-    return false;
 }
 
 void Student::studentAckHandler(Msg msg) {
@@ -122,8 +118,24 @@ void Student::incrementClock() {
     clockMtx.unlock();
 }
 
-void Student::updateOffer(int id, int wine){
+void Student::updateOffer(int id, int wine) {
+    offerMtx.lock();
     wineOffers[id] += wine;
+    offerMtx.unlock();
+}
+
+void Student::sendAck(int destinationRank) {
+    Msg msg;
+    msg.clock = clock;
+    MPI_Send(
+            &msg,
+            sizeof(Msg),
+            MPI_BYTE,
+            destinationRank,
+            ACK,
+            MPI_COMM_WORLD
+        );
+    incrementClock();
 }
 
 
