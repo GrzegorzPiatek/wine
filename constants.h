@@ -12,8 +12,8 @@ struct Msg {
 
 int isDebugOn = 0;
 
-#define WINE_MAKERS 3;
-#define STUDENTS 3;
+#define WINE_MAKERS 2;
+#define STUDENTS 2;
 
 #define SAFE_PLACES 1;
 

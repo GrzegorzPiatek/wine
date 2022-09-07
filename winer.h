@@ -4,10 +4,10 @@
 #include <utility>
 #include <chrono>
 #include <mutex>
-#include <constants.h> // Błąd na tym?
-#include <mpi> //Zły kompilator wpięty w IDE
+#include "constants.h" 
+#include <mpi.h> //Zły kompilator wpięty w IDE
 
-using name std;
+using namespace std;
 extern int myRank,maxRank;
 
 class Winer{

@@ -7,6 +7,8 @@
 #include "constants.h"
 #include <stdexcept>
 #include <iostream>
+#include "winer.h"
+#include "student.h"
 
 using namespace std;
 
@@ -14,16 +16,19 @@ int myRank, maxRank;
 
 int main(int argc, char *argv[])
 {
-    // if (argc < 4) {
-    //     cerr << "Exacly 3 arguments needed. [1] number of wine maker, [2] number of students, [3] number of safe places";
-    // }
-    
-    int provided;
+    int rank, size, provided;
+
     MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
-	MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
-	MPI_Comm_size(MPI_COMM_WORLD, &maxRank);
-
-
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    myRank = rank;
+    maxRank = size;
+    if (myRank < WINE_MAKERS)
+        Winer winer = new Winer();
+    else
+    {
+        Student student = new Student();
+    }
     MPI_Finalize();
     return 0;
 

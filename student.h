@@ -4,8 +4,8 @@
 #include <utility>
 #include <chrono>
 #include <mutex>
-#include <constants.h>
-#include <mpi>
+#include "constants.h"
+#include <mpi.h>
 
 using namespace std;
 extern int myRank, maxRank; //set it in main.cpp
@@ -15,7 +15,7 @@ private:
     mutex clockMtx;
     int clock;
 
-    mutex ackMutex;
+    mutex ackMtx;
     int ackCounter;
 
     int requestedOffer;
@@ -77,7 +77,7 @@ Student::Student() {
 void Student::threadMain() {
     while(true){
         sleepAndSetWine();
-        broadcastStudents(REQ); //Funkcja 2-argumentowa
+        broadcastStudents(REQ);
         exchange();
     }
 }
@@ -96,7 +96,7 @@ void Student::threadCommunicate() {
                 studentAckHandler(msg);
             }
             else if (status.MPI_TAG == UPD) {
-                updateOffer(msg.targetOffert, - msg.wine) //Argumenty
+                updateOffer(msg.targetOffert, - msg.wine)
             }
         }
         else { // msg from wine maker
@@ -108,7 +108,6 @@ void Student::threadCommunicate() {
 }
 
 void Student::studentReqHandler(Msg msg, int sourceRank) {
-
     if(clock > msg.clock || (clock == msg.clock && myRank > sourceRank)) {
         sendAck(sourceRank);
     } 
@@ -139,15 +138,15 @@ void Student::exchange() {
 }
 
 void Student::incrementAck() {
-    ackMutex.lock();
+    ackMtx.lock();
     ackCounter++;
-    ackMutex.unlock();
+    ackMtx.unlock();
 }
 
 void Student::resetAck() {
-    ackMutex.lock();
+    ackMtx.lock();
     ackCounter = 0;
-    ackMutex.unlock();
+    ackMtx.unlock();
 }
 
 void Student::incrementClock() {
@@ -180,7 +179,6 @@ void Student::sendAckToPendingRequests() {
     for (int i = 0; i < STUDENTS; i++) {
         if (pendingRequests[i]){
             sendAck(i);
-            //Nie powinno pójść i+WINE_MAKERS bo chcemy wysłać studentom którzy od nas nie dostali jeszcze ACK?
         }
     }
 }
