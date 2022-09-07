@@ -61,6 +61,9 @@ protected:
     void studentReqHandler(Msg msg, int sourceRank); // return true for ACK response
 
     void studentAckHandler(Msg msg);
+
+    void log(string msg);
+
 public:
     Student();
 };
@@ -122,7 +125,9 @@ void Student::studentAckHandler(Msg msg) {
 }
 
 void Student::exchange() {
+    log('Wait for exchange');
     exchangeMtx.lock();
+    log('Start exchange');
     int wineMaker = chooseOffer();
     int getableWine = min(wine, wineOffers[wineMaker]);
     updateOffer(wineMaker, - getableWine);
@@ -193,7 +198,9 @@ void Student::sendExchangeToWineMaker(int destinationRank, int wine) {
     incrementClock();
 }
 
+
 void Student::broadcastStudents(int tag) {
+    log('Send req to all students');
     clockMtx.lock();
     Msg msg;
     msg.clock = myClock;
@@ -217,7 +224,6 @@ void Student::sleepAndSetWine() {
     wine = rand() % (MAX_WINE/2) + 1;
 }
 
-
 int Student::chooseOffer() {
     int min = MAX_WINE + 1;
     int offer = -1;
@@ -225,4 +231,8 @@ int Student::chooseOffer() {
         if(0 < wineOffers[i] < min)
             offer = i;
     return offer;
+}
+
+void Student::log(string msg) {
+    cout << myRank << ':' <<  clock << '>' << msg << endl;
 }
