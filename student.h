@@ -44,7 +44,7 @@ protected:
 
     void incrementClock();
 
-    void broadcastStudents(int tag, int targetWineMakerRank);
+    void broadcastStudents(int tag);
 
     void sendAck(int rank);
 
@@ -61,6 +61,9 @@ protected:
     void studentReqHandler(Msg msg, int sourceRank); // return true for ACK response
 
     void studentAckHandler(Msg msg);
+
+    void log(string msg);
+
 public:
     Student();
 };
@@ -82,10 +85,11 @@ void Student::threadMain() {
 void Student::threadCommunicate() {
     Msg msg;
     while (true) {
+        exchangeMtx.lock();
         MPI_Recv(&msg, 1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
         
         if(status.MPI_SOURCE >= WINE_MAKERS) { // msg from student
-            if(status.MPI_SOURCE == REQ) {
+            if(status.MPI_TAG == REQ) {
                 studentReqHandler(msg, status.MPI_SOURCE);
             }
             else if (status.MPI_TAG == ACK) {
@@ -104,7 +108,8 @@ void Student::threadCommunicate() {
 }
 
 void Student::studentReqHandler(Msg msg, int sourceRank) {
-    if(clock > msg.clock || (clock == msg.clock && myRank > sourceRank)) { //Porównanie zamiast przypisania powinno być xd
+
+    if(clock > msg.clock || (clock == msg.clock && myRank > sourceRank)) {
         sendAck(sourceRank);
     } 
     else {
@@ -113,11 +118,17 @@ void Student::studentReqHandler(Msg msg, int sourceRank) {
 }
 
 void Student::studentAckHandler(Msg msg) {
-    if(ackCounter)
+    incrementAck()
+    if(ackCounter == STUDENTS -1) {
+        exchangeMtx.unlock();
+        resetAck();
+    }
 }
 
 void Student::exchange() {
+    log('Wait for exchange');
     exchangeMtx.lock();
+    log('Start exchange');
     int wineMaker = chooseOffer();
     int getableWine = min(wine, wineOffers[wineMaker]);
     updateOffer(wineMaker, - getableWine);
@@ -189,12 +200,12 @@ void Student::sendExchangeToWineMaker(int destinationRank, int wine) {
     incrementClock();
 }
 
-void Student::broadcastStudents(int tag, int targetWineMakerRank=0, int wine = 0) {
+
+void Student::broadcastStudents(int tag) {
+    log('Send req to all students');
     clockMtx.lock();
     Msg msg;
     msg.clock = myClock;
-    msg.targetRank = targetWineMakerRank;
-    msg.wine = wine;
     for (int i = WINE_MAKERS; i < maxRank; i++) {
         if (i==myRank) continue;
         MPI_Send(
@@ -215,7 +226,6 @@ void Student::sleepAndSetWine() {
     wine = rand() % (MAX_WINE/2) + 1;
 }
 
-
 int Student::chooseOffer() {
     int min = MAX_WINE + 1;
     int offer = -1;
@@ -223,4 +233,8 @@ int Student::chooseOffer() {
         if(0 < wineOffers[i] < min)
             offer = i;
     return offer;
+}
+
+void Student::log(string msg) {
+    cout << myRank << ':' <<  clock << '>' << msg << endl;
 }
