@@ -77,7 +77,7 @@ Student::Student() {
 void Student::threadMain() {
     while(true){
         sleepAndSetWine();
-        broadcastStudents(REQ);
+        broadcastStudents(REQ); //Funkcja 2-argumentowa
         exchange();
     }
 }
@@ -96,7 +96,7 @@ void Student::threadCommunicate() {
                 studentAckHandler(msg);
             }
             else if (status.MPI_TAG == UPD) {
-                updateOffer(msg.targetOffert, - msg.wine)
+                updateOffer(msg.targetOffert, - msg.wine) //Argumenty
             }
         }
         else { // msg from wine maker
@@ -108,6 +108,7 @@ void Student::threadCommunicate() {
 }
 
 void Student::studentReqHandler(Msg msg, int sourceRank) {
+
     if(clock > msg.clock || (clock == msg.clock && myRank > sourceRank)) {
         sendAck(sourceRank);
     } 
@@ -179,6 +180,7 @@ void Student::sendAckToPendingRequests() {
     for (int i = 0; i < STUDENTS; i++) {
         if (pendingRequests[i]){
             sendAck(i);
+            //Nie powinno pójść i+WINE_MAKERS bo chcemy wysłać studentom którzy od nas nie dostali jeszcze ACK?
         }
     }
 }
