@@ -23,7 +23,9 @@ private:
     int wineAmount;
 
     int pendingRequests[WINE_MAKERS] = {0};
-    int gotAckFrom[WINE_MAKERS] = {0};
+    //int gotAckFrom[WINE_MAKERS] = {0};
+
+    MPI_Status status;
     
 
 protected:
@@ -45,11 +47,9 @@ protected:
 
     void makeWine(); 
 
-    void incrementAck();
-
     void safePlace();
 
-    void winerReqHandler(Msg msg, int source rank);
+    void winerReqHandler(Msg msg, int sourceRank);
 
     void winerAckHandler(Msg msg);
 
@@ -63,7 +63,7 @@ public:
 };
 
 Winer::Winer(){
-    clcok = myRank;
+    clock = myRank;
     mainThreadWiner = new thread(&Winer::threadMainWiner,this);
     communicationThreadWiner = new thread(&Winer::threadCommunicateWiner,this);
 }
@@ -72,8 +72,9 @@ void Winer::threadMainWiner(){
     while(true){
         //Tutaj inny order powinien być
         makeWine();
-        gotAckFrom = {0};
-        broadCastWiners(REQ) //Zapytanie winiarzy o bm
+        //int gotAckFrom[WINE_MAKERS] = {0};
+        //gotAckFrom = {0}; //Zła operacja
+        broadCastWiners(REQ); //Zapytanie winiarzy o bm
         inSafePlaceMtx.lock();
         safePlace();
         inSafePlaceMtx.unlock();
@@ -86,11 +87,11 @@ void Winer::threadCommunicateWiner(){
     Msg msg;
     while(true){
         inSafePlaceMtx.lock();
-        MPI_RECV(&msg,1,MPI_INT,MPI_ANY_SOURCE,MPI_ANY_TAG,MPI_COMM_WORLD,&status);
+        MPI_Recv(&msg, 1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 
         
         if (status.MPI_SOURCE < WINE_MAKERS){ //Komunikacja między winiarzami
-            if (status.TAG == REQ){
+            if (status.MPI_TAG == REQ){
                 winerReqHandler(msg,status.MPI_SOURCE);
 
             }
@@ -126,6 +127,7 @@ void Winer::safePlace(){
     clockMtx.lock();
     Msg msg;
     msg.wine = wineAmount;
+    int tag = ACK;
     for (int i = WINE_MAKERS;i<maxRank;i++){
         MPI_Send(
             &msg,
@@ -152,10 +154,25 @@ void Winer::safePlace(){
 
     
 }
+
+void Winer::sendAck(int destinationRank, int requestClock){
+    Msg msg;
+    msg.clock = requestClock;
+    MPI_Send(
+            &msg,
+            sizeof(msg),
+            MPI_BYTE,
+            destinationRank,
+            ACK,
+            MPI_COMM_WORLD
+    );
+    incrementClock();
+}
+
 void Winer::sendAckToRest(){
     for (int i = 0; i < WINE_MAKERS;i++){
         if (pendingRequests[i]){
-            sendAck(i);
+            sendAck(i,pendingRequests[i]);
             pendingRequests[i]=0; //resetujemy po wysłaniu
         }
     }
@@ -179,26 +196,13 @@ void Winer::incrementClock(){
     clockMtx.unlock();
 }
 
-void Winer::sendAck(int destinationRank, int requestClock){
-    Msg msg;
-    msg.clock = requestClock;
-    MPI_Send(
-            &msg,
-            sizeof(msg),
-            MPI_BYTE,
-            destinationRank,
-            ACK,
-            MPI_COMM_WORLD
-    );
-    incrementClock();
-}
 
 void Winer::broadCastWiners(int tag){ //Wybieranie przez zegar nic więcej
     clockMtx.lock();
     Msg msg;
     msg.clock = clock;
     for (int i = 0 ;i<WINE_MAKERS;i++){
-        if i==myRank continue;
+        if (i==myRank) continue;
         MPI_Send(
             &msg,
             sizeof(Msg),
