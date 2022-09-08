@@ -24,12 +24,11 @@ int main(int argc, char *argv[])
     myRank = rank;
     maxRank = size;
     if (myRank < WINE_MAKERS)
-        Winer winer = new Winer();
+        Winer winer = Winer();
     else
     {
-        Student student = new Student();
+        Student student = Student();
     }
     MPI_Finalize();
     return 0;
-
 }
