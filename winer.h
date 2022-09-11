@@ -26,7 +26,6 @@ private:
     int wineAmount;
 
     int pendingRequests[WINE_MAKERS] = {0};
-    //int gotAckFrom[WINE_MAKERS] = {0};
 
     MPI_Status status;
 
@@ -79,11 +78,8 @@ void Winer::threadMainWiner(){
     log("inside main thread");
 
     while(true){
-        //Tutaj inny order powinien być
         makeWine();
         log("after makeWine()");
-        //int gotAckFrom[WINE_MAKERS] = {0};
-        //gotAckFrom = {0}; //Zła operacja
         broadCastWiners(); //Zapytanie winiarzy o bm
         log("after broadCastWiners()");
         inSafePlaceMtx.lock();
@@ -109,9 +105,9 @@ void Winer::threadCommunicateWiner(){
             else if(status.MPI_TAG == ACK)  {
                 winerAckHandler(msg);
             }
-            //Dla winiarzy chyba brak update
+            
         } 
-        //Elsa też brak
+        
 
     }
 }
@@ -141,19 +137,21 @@ void Winer::safePlace(){
     msg.wine = wineAmount;
     msg.clockT = clock;
     for (int i = WINE_MAKERS;i<maxRank;i++){
-        log("In safePlace | Send to " + to_string(i));
-        sendMsg(&msg, i, ACK);
+        log("In safePlace | Send to student: " + to_string(i));
+        sendMsg(&msg, i, REQ);
     }
     clock++;
     clockMtx.unlock();
     
-    //Komunikacja do studentów o chęci wymiany i ilości wina
     while (wineAmount > 0){
      //Czekanie na potwierdzenie wymiany od studenta
      MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 
-     //Odjęcie wina po wymianie
-     wineAmount -= msg.wine;
+     if (status.MPI_SOURCE >= WINE_MAKERS){ //Sprawdzenie czy wiadomość przyszła od studenta
+        //Odjęcie wina po wymianie
+        wineAmount -= msg.wine;
+     }
+
     }
     
     sendAckToRest();
@@ -162,12 +160,13 @@ void Winer::safePlace(){
 void Winer::sendAck(int destinationRank, int requestClock){
     Msg msg;
     msg.clockT = requestClock;
-    log("In safePlace | Send to " + to_string(destinationRank));
+    log("Sending ACK to:  " + to_string(destinationRank));
     sendMsg(&msg, destinationRank, ACK);
     incrementClock();
 }
 
 void Winer::sendAckToRest(){
+    log("Sending overdue ACK ")
     for (int i = 0; i < WINE_MAKERS;i++){
         if (pendingRequests[i]){
             sendAck(i,pendingRequests[i]);
