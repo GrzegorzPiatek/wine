@@ -1,4 +1,0 @@
-main: main.cpp
-	mpic++ main.cpp -o main -lpthread
-run: main
-	mpirun -np 4 ./main

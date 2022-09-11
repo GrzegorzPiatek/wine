@@ -21,8 +21,8 @@
 
 
 struct Msg {
-    int clock;
-    int targetOffert;
+    int clockT;
+    int targetOffer;
     int wine;
 };
 
