@@ -7,6 +7,7 @@
 #include "constants.h"
 #include <mpi.h>
 #include <cstdlib>
+#include <time.h>
 
 using namespace std;
 extern int myRank, maxRank; //set it in main.cpp
@@ -18,7 +19,7 @@ private:
     int clock;
 
     mutex ackMtx;
-    int ackCounter;
+    int ackCounter = 0;
 
     int requestedOffer;
     int wine;
@@ -47,7 +48,9 @@ protected:
 
     void incrementClock();
 
-    void broadcastStudents();
+    void sendReqToStudents();
+
+    void sendUpdToStudents(int wineMaker, int wine);
 
     void sendAck(int rank);
 
@@ -77,9 +80,12 @@ public:
 
 Student::Student() {
     cout <<"STUDENT: " <<"myRank: " << myRank << "maxRank: " << maxRank << endl;
-    clock = myRank;
-    mainThread = new thread(&Student::threadMain, this);
+    srand(time(NULL));
+
+    clock = 0;
+    // mainThread = new thread(&Student::threadMain, this);
     communicateThread = new thread(&Student::threadCommunicate, this);
+    threadMain();
 }
 
 void Student::threadMain() {
@@ -88,8 +94,8 @@ void Student::threadMain() {
     while(true){
         sleepAndSetWine();
         log("after sleepAndSetWine()");
-        broadcastStudents();
-        log("after broadcastStudents()");
+        sendReqToStudents();
+        log("after sendReqToStudents()");
         exchange();
         log("after exchange()");
     }
@@ -100,9 +106,9 @@ void Student::threadCommunicate() {
     log("inside communicate thread");
 
     while (true) {
-        exchangeMtx.lock();
+        if (wine == 0) exchangeMtx.lock();
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-        
+        if(status.MPI_SOURCE == myRank) continue; //ignore selfmsg
         if(status.MPI_SOURCE >= WINE_MAKERS) { // msg from student
             if(status.MPI_TAG == REQ) {
                 studentReqHandler(msg, status.MPI_SOURCE);
@@ -135,7 +141,6 @@ void Student::studentAckHandler(Msg msg) {
     incrementAck();
     if(ackCounter == STUDENTS -1) {
         exchangeMtx.unlock();
-        resetAck();
     }
 }
 
@@ -148,8 +153,11 @@ void Student::exchange() {
     updateOffer(wineMaker, - getableWine);
     wine -= getableWine;
     sendExchangeToWineMaker(wineMaker, getableWine);
+    sendUpdToStudents(wineMaker, getableWine);
     sendAckToPendingRequests();
+    resetAck();
     exchangeMtx.unlock();
+    sendAck(myRank);
 }
 
 void Student::incrementAck() {
@@ -195,12 +203,12 @@ void Student::sendExchangeToWineMaker(int destinationRank, int wine) {
     Msg msg;
     msg.clockT = clock;
     msg.wine = wine;
-    sendMsg(&msg, destinationRank, ACK);
+    sendMsg(&msg, destinationRank, EXCHANGE);
     incrementClock();
 }
 
 
-void Student::broadcastStudents() {
+void Student::sendReqToStudents() {
     log("Send req to all students");
     clockMtx.lock();
     Msg msg;
@@ -208,15 +216,29 @@ void Student::broadcastStudents() {
     for (int i = WINE_MAKERS; i < maxRank; i++) {
         if (i==myRank) continue;
         sendMsg(&msg, i, REQ);
+    }
+    clock++;
+    clockMtx.unlock();
+}
 
+void Student::sendUpdToStudents(int wineMaker, int wine) {
+    log("SendUpdToSudents");
+    clockMtx.lock();
+    Msg msg;
+    msg.clockT = clock;
+    msg.targetOffer = wineMaker;
+    msg.wine = wine;
+    for (int i = WINE_MAKERS; i < maxRank; i++) {
+        if (i==myRank) continue;
+        sendMsg(&msg, i, UPD);
     }
     clock++;
     clockMtx.unlock();
 }
 
 void Student::sleepAndSetWine() {
-    // this_thread::sleep_for(chrono::seconds(rand() % 5 + 1));
-    // sleep(rand() % 5 + 1);
+    this_thread::sleep_for(chrono::seconds(3));
+    // sleep(1);
     wine = rand() % (MAX_WINE/2) + 1;
 }
 
@@ -236,7 +258,7 @@ int Student::chooseOffer() {
 }
 
 void Student::log(string msg) {
-    cout << "S" << myRank << ":" <<  clock << ">" << msg << endl;
+    cout << "S" << myRank << ":" <<  clock << ">" << msg << " wine:" << wine << endl;
 }
 
 void Student::sendMsg(Msg *msg, int destinationRank, int tag) {
@@ -248,4 +270,6 @@ void Student::sendMsg(Msg *msg, int destinationRank, int tag) {
         tag,
         MPI_COMM_WORLD
     );
+    log("Send: " + to_string(tag) + " to" + to_string(destinationRank));
+
 }
