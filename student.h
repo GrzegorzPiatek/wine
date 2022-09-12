@@ -106,7 +106,7 @@ void Student::threadCommunicate() {
     log("inside communicate thread");
 
     while (true) {
-        if (wine == 0) exchangeMtx.lock();
+        // if (wine == 0) exchangeMtx.lock();
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
         if(status.MPI_SOURCE == myRank) continue; //ignore selfmsg
         if(status.MPI_SOURCE >= WINE_MAKERS) { // msg from student
@@ -140,13 +140,17 @@ void Student::studentReqHandler(Msg msg, int sourceRank) {
 void Student::studentAckHandler(Msg msg) {
     incrementAck();
     if(ackCounter == STUDENTS -1) {
-        exchangeMtx.unlock();
+        // exchangeMtx.unlock();
+        sendAck(myRank);
+        MPI_Recv(&msg, 1, MPI_MSG_TYPE, myRank, REQ, MPI_COMM_WORLD, &status);
     }
 }
 
 void Student::exchange() {
     log("Wait for exchange");
-    exchangeMtx.lock();
+    // exchangeMtx.lock();
+    Msg msg;
+    MPI_Recv(&msg, 1, MPI_MSG_TYPE, myRank, ACK, MPI_COMM_WORLD, &status);
     log("Start exchange");
     int wineMaker = chooseOffer();
     int getableWine = min(wine, wineOffers[wineMaker]);
@@ -156,8 +160,8 @@ void Student::exchange() {
     sendUpdToStudents(wineMaker, getableWine);
     sendAckToPendingRequests();
     resetAck();
-    exchangeMtx.unlock();
-    sendAck(myRank);
+    // exchangeMtx.unlock();
+    sendMsg(&msg,myRank, REQ);
 }
 
 void Student::incrementAck() {
@@ -239,7 +243,7 @@ void Student::sendUpdToStudents(int wineMaker, int wine) {
 void Student::sleepAndSetWine() {
     this_thread::sleep_for(chrono::seconds(3));
     // sleep(1);
-    wine = rand() % (MAX_WINE/2) + 1;
+    wine = 5;//rand() % (MAX_WINE/2) + 1;
 }
 
 int Student::chooseOffer() {
@@ -254,11 +258,12 @@ int Student::chooseOffer() {
         updateOffer(status.MPI_SOURCE, msg.wine);
         return status.MPI_SOURCE;
     }
+    log("choosed offer: " + to_string(offer));
     return offer;
 }
 
 void Student::log(string msg) {
-    cout << "S" << myRank << ":" <<  clock << ">" << msg << " wine:" << wine << endl;
+    cout << "S" << myRank << ":" <<  clock << "> " << msg << " wine:" << wine << endl;
 }
 
 void Student::sendMsg(Msg *msg, int destinationRank, int tag) {

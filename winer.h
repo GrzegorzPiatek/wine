@@ -87,9 +87,9 @@ void Winer::threadMainWiner(){
         log("after makeWine()");
         broadCastWiners(); //Zapytanie winiarzy o bm
         log("after broadCastWiners()");
-        inSafePlaceMtx.lock();
+        // inSafePlaceMtx.lock();
         safePlace();
-        inSafePlaceMtx.unlock();  
+        // inSafePlaceMtx.unlock();  
         log("after safePlace()"); 
     }
 }
@@ -98,7 +98,7 @@ void Winer::threadCommunicateWiner(){
     Msg msg;
     log("inside communicate thread");
     while(true){
-        if(wineAmount == 0) inSafePlaceMtx.lock();
+        // if(wineAmount == 0) inSafePlaceMtx.lock();
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
         if(status.MPI_SOURCE == myRank) continue;
         log("recv" + to_string(status.MPI_TAG));
@@ -127,14 +127,17 @@ void Winer::winerAckHandler(Msg msg){
         if (ackCounter == MIN_ACK){ //Wzór z kartki z algorytmem 
             //Wejście do bezpiecznego miejsca
             inSafePlaceMtx.unlock();
+            sendAck(myRank, clock);
+            MPI_Recv(&msg, 1, MPI_MSG_TYPE, myRank, REQ, MPI_COMM_WORLD, &status);
         }
     }
 }
 
 void Winer::safePlace(){
     //Wysyłka do studentów o ilości wina jaką mam
-    clockMtx.lock();
+    // clockMtx.lock();
     Msg msg;
+    MPI_Recv(&msg, 1, MPI_MSG_TYPE, myRank, ACK, MPI_COMM_WORLD, &status);
     msg.wine = wineAmount;
     msg.clockT = clock;
     for (int i = WINE_MAKERS;i<maxRank;i++){
@@ -142,16 +145,17 @@ void Winer::safePlace(){
         sendMsg(&msg, i, REQ);
     }
     clock++;
-    clockMtx.unlock();
+    // clockMtx.unlock();
     
     while (wineAmount > 0){
         //Czekanie na potwierdzenie wymiany od studenta
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, EXCHANGE, MPI_COMM_WORLD, &status);
         wineAmount -= msg.wine;
+        log("spent wine:" + to_string(msg.wine));
     }
     resetAck();
     sendAckToRest();
-    sendAck(myRank, clock);
+    sendMsg(&msg, myRank,REQ);
 }
 
 void Winer::sendAck(int destinationRank, int requestClock){
@@ -159,7 +163,7 @@ void Winer::sendAck(int destinationRank, int requestClock){
     msg.clockT = requestClock;
     log("Sending ACK to:  " + to_string(destinationRank));
     sendMsg(&msg, destinationRank, ACK);
-    incrementClock();
+    // incrementClock();
 }
 
 void Winer::sendAckToRest(){
@@ -209,11 +213,11 @@ void Winer::broadCastWiners(){ //Wybieranie przez zegar nic więcej
 void Winer::makeWine(){
     this_thread::sleep_for(chrono::seconds(3));
     // sleep(1);
-    wineAmount = rand() % (MAX_WINE) + 1;
+    wineAmount = 5;//rand() % (MAX_WINE) + 1;
 }
 
 void Winer::log(string msg){
-    cout << "W" << myRank << ':' << clock << '>' << msg << " wine:" << wineAmount << endl;
+    cout << "W" << myRank << ":" << clock << "> " << msg << " wine:" << wineAmount << endl;
 }
 
 void Winer::sendMsg(Msg *msg, int destinationRank, int tag) {
