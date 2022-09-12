@@ -5,6 +5,7 @@
 #define ACK 1
 #define UPD 2 // tell students to update offer after exchange
 #define EXCHANGE 4
+#define WINE 5
 
 #define WINE_MAKERS 2
 #define STUDENTS 2
