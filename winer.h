@@ -67,12 +67,10 @@ protected:
 
 public:
     Winer();
-
 };
 
 Winer::Winer(){
     cout << "WINIARZ: " << "myRank: " << myRank << "maxRank: " << maxRank << endl;
-    srand(time(NULL));
 
     clock = 1;
     // mainThreadWiner = new thread(&Winer::threadMainWiner,this);
@@ -87,6 +85,7 @@ void Winer::threadMainWiner(){
     while(true){
         log("PRODUKUJE");
         makeWine();
+        srand(time(NULL));
         // log("after makeWine()");
         broadCastWiners(); //Zapytanie winiarzy o bm
         log("Czekam na zgode");
@@ -103,7 +102,7 @@ void Winer::threadCommunicateWiner(){
     while(true){
         // if(wineAmount == 0) inSafePlaceMtx.lock();
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-        // log("@@ Recv " + to_string(status.MPI_TAG) + " from " + to_string(status.MPI_SOURCE));
+        log("@@ Recv " + to_string(status.MPI_TAG) + " from " + to_string(status.MPI_SOURCE));
         if(status.MPI_SOURCE == myRank){
             haveWine = true;
         };        // log("recv" + to_string(status.MPI_TAG));

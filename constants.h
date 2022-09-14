@@ -7,15 +7,15 @@
 #define EXCHANGE 4
 #define WINE 5
 
-#define WINE_MAKERS 2
-#define STUDENTS 2
+#define WINE_MAKERS 3
+#define STUDENTS 3
 
 #define SAFE_PLACES 1
 
 #define MIN_ACK WINE_MAKERS - SAFE_PLACES
 
 #define MIN_TIME_WAIT 1
-#define MAX_TIME_WAIT 4
+#define MAX_TIME_WAIT 2
 
 #define MAX_RANK  WINE_MAKERS + STUDENTS
 
