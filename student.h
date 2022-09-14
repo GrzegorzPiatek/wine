@@ -79,6 +79,8 @@ protected:
 
     void updatePendingUpdates(int value);
 
+    void lamport(int selfClock,int msgClock);
+
 public:
     Student();
 };
@@ -113,6 +115,7 @@ void Student::threadCommunicate() {
     Msg msg;
     while (true) {
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+        lamport(clock,msg.clockT);
         log("@@ Recv " + to_string(status.MPI_TAG) + " from " + to_string(status.MPI_SOURCE));
         if(status.MPI_SOURCE == myRank){
             needWine = true;
@@ -167,6 +170,7 @@ void Student::studentAckHandler(Msg msg) {
         // }
         sendAck(myRank);
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, myRank, REQ, MPI_COMM_WORLD, &status);
+        lamport(clock,msg.clockT);
         needWine = false;
     }
 }
@@ -176,6 +180,7 @@ void Student::exchange() {
     // exchangeMtx.lock();
     Msg msg;
     MPI_Recv(&msg, 1, MPI_MSG_TYPE, myRank, ACK, MPI_COMM_WORLD, &status);
+    lamport(clock,msg.clockT);
     log("Otrzymalem zgody");
     int wineMaker = chooseOffer();
     int getableWine = min(wine, wineOffers[wineMaker]);
@@ -188,6 +193,7 @@ void Student::exchange() {
     resetAck();
     // exchangeMtx.unlock();
     sendMsg(&msg,myRank, REQ);
+    lamport(clock,msg.clockT);
 }
 
 void Student::updatePendingUpdates(int value) {
@@ -231,6 +237,7 @@ void Student::sendAck(int destinationRank) {
     Msg msg;
     msg.clockT = clock;
     sendMsg(&msg, destinationRank, ACK);
+    lamport(clock,msg.clockT);
     //incrementClock();
 }
 
@@ -249,6 +256,7 @@ void Student::sendExchangeToWineMaker(int destinationRank, int exchangeWine) {
     log("SEND TO WINER " + to_string(destinationRank) + "  WINE_EXCHANGE " + to_string(exchangeWine));
     sendMsg(&msg, destinationRank, EXCHANGE);
     incrementClock();
+    lamport(clock,msg.clockT);
 }
 
 
@@ -260,6 +268,7 @@ void Student::sendReqToStudents() {
     for (int i = WINE_MAKERS; i < maxRank; i++) {
         if (i==myRank) continue;
         sendMsg(&msg, i, REQ);
+        lamport(clock,msg.clockT);
     }
     // clock++;
     // clockMtx.unlock();
@@ -275,6 +284,7 @@ void Student::sendUpdToStudents(int wineMaker, int wine) {
     for (int i = WINE_MAKERS; i < maxRank; i++) {
         if (i==myRank) continue;
         sendMsg(&msg, i, UPD);
+        lamport(clock,msg.clockT);
     }
     // clock++;
     // clockMtx.unlock();
@@ -303,6 +313,7 @@ int Student::chooseOffer() {
     Msg msg;
     if(offerId < 0){
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, WINE, MPI_COMM_WORLD, &status);
+        lamport(clock,msg.clockT);
         offerId = status.MPI_SOURCE;
         updateOffer(offerId, msg.wine);
         log("poczekałem i dostałem oferte od " + to_string(offerId) +"z winem: " + to_string(msg.wine));
@@ -317,6 +328,7 @@ void Student::log(string msg) {
 }
 
 void Student::sendMsg(Msg *msg, int destinationRank, int tag) {
+    msg->clockT = clock;
     MPI_Send(
         msg,
         1,
@@ -326,4 +338,10 @@ void Student::sendMsg(Msg *msg, int destinationRank, int tag) {
         MPI_COMM_WORLD
     );
     // log("Send: " + to_string(tag) + " to" + to_string(destinationRank));
+}
+
+void Student::lamport(int selfClock,int msgClock){
+    clockMtx.lock();
+    clock = max(clock,msgClock) + 1
+    clockMtx.unlock();
 }

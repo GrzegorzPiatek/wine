@@ -8,6 +8,7 @@
 #include <mpi.h> //Zły kompilator wpięty w IDE
 #include <cstdlib>
 #include <time.h>
+#include <algorithm>
 
 
 using namespace std;
@@ -65,6 +66,8 @@ protected:
 
     void sendMsg(Msg *msg, int destinationRank, int tag);
 
+    void lamport(int selfClock,int msgClock);
+
 public:
     Winer();
 };
@@ -102,6 +105,7 @@ void Winer::threadCommunicateWiner(){
     while(true){
         // if(wineAmount == 0) inSafePlaceMtx.lock();
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+        lamport(clock,msg.clockT)
         log("@@ Recv " + to_string(status.MPI_TAG) + " from " + to_string(status.MPI_SOURCE));
         if(status.MPI_SOURCE == myRank){
             haveWine = true;
@@ -136,6 +140,8 @@ void Winer::winerAckHandler(Msg msg){
             sendAck(myRank, clock);
             MPI_Recv(&msg, 1, MPI_MSG_TYPE, myRank, REQ, MPI_COMM_WORLD, &status);
             resetAck();
+
+            lamport(clock,msg.clockT)
         }
     }
 }
@@ -144,6 +150,7 @@ void Winer::safePlace(){
     //Wysyłka do studentów o ilości wina jaką mam
     Msg msg;
     MPI_Recv(&msg, 1, MPI_MSG_TYPE, myRank, ACK, MPI_COMM_WORLD, &status);
+    lamport(clock,msg.clockT)
     msg.wine = wineAmount;
     msg.clockT = clock;
     // clockMtx.lock();
@@ -151,6 +158,7 @@ void Winer::safePlace(){
     for (int i = WINE_MAKERS;i<maxRank;i++){
         // log("In safePlace | Send to student: " + to_string(i));
         sendMsg(&msg, i, WINE);
+        lamport(clock,msg.clockT);
     }
     // clock++;
     // clockMtx.unlock();
@@ -160,10 +168,12 @@ void Winer::safePlace(){
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, EXCHANGE, MPI_COMM_WORLD, &status);
         wineAmount -= msg.wine;
         log("Oddałem wina " + to_string(msg.wine) + " Studentowi " + to_string(status.MPI_SOURCE));
+        lamport(clock,msg.clockT)
     }
     incrementClock();
     sendAckToRest();
     sendMsg(&msg, myRank,REQ);
+    lamport(clock,msg.clockT);
 }
 
 void Winer::sendAck(int destinationRank, int requestClock){
@@ -171,6 +181,7 @@ void Winer::sendAck(int destinationRank, int requestClock){
     msg.clockT = requestClock;
     // log("Sending ACK to:  " + to_string(destinationRank));
     sendMsg(&msg, destinationRank, ACK);
+    lamport(clock,msg.clockT);
     // incrementClock();
 }
 
@@ -212,6 +223,7 @@ void Winer::broadCastWiners(){ //Wybieranie przez zegar nic więcej
         if (i==myRank) continue;
         // log("in broadCastWiners | Send to " + to_string(i));
         sendMsg(&msg, i, REQ);
+        lamport(clock,msg.clockT);
     }
     lastReqClock = clock;
     // clock++;
@@ -229,6 +241,7 @@ void Winer::log(string msg){
 }
 
 void Winer::sendMsg(Msg *msg, int destinationRank, int tag) {
+    msg->clockT = clock; //Dodanie do definicji, pewność, że zegary będą na pewno przysłane wiadomością
     MPI_Send(
         msg,
         1,
@@ -238,4 +251,10 @@ void Winer::sendMsg(Msg *msg, int destinationRank, int tag) {
         MPI_COMM_WORLD
     );
     // log("Send: " + to_string(tag) + " to" + to_string(destinationRank));
+}
+
+void Winer::lamport(int selfClock,int msgClock){
+    clockMtx.lock();
+    clock = max(selfClock,msgClock)+1;
+    clock.unlock();
 }
