@@ -19,7 +19,7 @@
 
 #define MAX_RANK  WINE_MAKERS + STUDENTS
 
-#define MAX_WINE 10
+#define MAX_WINE 5
 
 
 struct Msg {

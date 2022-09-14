@@ -95,7 +95,7 @@ void Student::threadMain() {
 
     while(true){
         log("IMPREZUJE");
-        if(wine == 0) sleepAndSetWine();
+        if(wine < 1) sleepAndSetWine();
         // log("after sleepAndSetWine()");
         sendReqToStudents();
         log("Czekam na zgody");
@@ -113,8 +113,9 @@ void Student::threadCommunicate() {
         // log("@@ Recv " + to_string(status.MPI_TAG) + " from " + to_string(status.MPI_SOURCE));
         if(status.MPI_SOURCE == myRank){
             needWine = true;
-        }; //ignore selfmsg
-        if(status.MPI_SOURCE >= WINE_MAKERS) { // msg from student
+            continue;
+        }
+        else if(status.MPI_SOURCE >= WINE_MAKERS) { // msg from student
             if(status.MPI_TAG == REQ) {
                 studentReqHandler(msg, status.MPI_SOURCE);
             }
@@ -167,6 +168,9 @@ void Student::exchange() {
     log("Otrzymalem zgody");
     int wineMaker = chooseOffer();
     int getableWine = min(wine, wineOffers[wineMaker]);
+    log("getableWine " + to_string(getableWine)
+    + "  wine maker " + to_string(wineMaker)
+    + "  wineOffer " + to_string(wineOffers[wineMaker]));
     updateOffer(wineMaker, - getableWine);
     wine -= getableWine;
     log("Dostałem wina "+ to_string(getableWine) + " od " + to_string(wineMaker));
@@ -197,9 +201,20 @@ void Student::incrementClock() {
 }
 
 void Student::updateOffer(int id, int wine) {
+    string logg = "";
+    for (int i = 0; i<WINE_MAKERS; i++){
+        logg += (to_string(i)+":"+ to_string(wineOffers[i])+" ");
+    }
+    log("Before update wineOffers: " + logg);
     offerMtx.lock();
-    wineOffers[id] += wine;
+    wineOffers[id] = wineOffers[id] + wine;
+    if(wineOffers[id] < 0) wineOffers[id] = 0;
     offerMtx.unlock();
+    logg = "";
+    for (int i = 0; i<WINE_MAKERS; i++){
+        logg += (to_string(i)+":"+ to_string(wineOffers[i])+" ");
+    }
+    log("After update wineOffers: " + logg);
 }
 
 void Student::sendAck(int destinationRank) {
@@ -210,7 +225,7 @@ void Student::sendAck(int destinationRank) {
 }
 
 void Student::sendAckToPendingRequests() {
-    for (int i = WINE_MAKERS; i < STUDENTS; i++) {
+    for (int i = WINE_MAKERS; i < maxRank; i++) {
         if (pendingRequests[i]){
             sendAck(i);
         }
@@ -257,7 +272,7 @@ void Student::sendUpdToStudents(int wineMaker, int wine) {
 void Student::sleepAndSetWine() {
     this_thread::sleep_for(chrono::seconds(rand() % (MAX_TIME_WAIT) + MIN_TIME_WAIT));
     // sleep(1);
-    wine = rand() % (MAX_WINE/2) + 1;
+    wine = rand() % (MAX_WINE) + 1;
 }
 
 int Student::chooseOffer() {
@@ -277,10 +292,12 @@ int Student::chooseOffer() {
     Msg msg;
     if(offerId < 0){
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, WINE, MPI_COMM_WORLD, &status);
-        updateOffer(status.MPI_SOURCE, msg.wine);
-        return status.MPI_SOURCE;
+        offerId = status.MPI_SOURCE;
+        updateOffer(offerId, msg.wine);
+        log("poczekałem i dostałem oferte od " + to_string(offerId) +"z winem: " + to_string(msg.wine));
+        return offerId;
     }
-    log("choosed offer: " + to_string(offerId));
+    log("wybrałem z dostępnych: " + to_string(offerId));
     return offerId;
 }
 

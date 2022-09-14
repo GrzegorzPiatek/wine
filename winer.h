@@ -226,7 +226,7 @@ void Winer::makeWine(){
 }
 
 void Winer::log(string msg){
-    cout << "W" << myRank << ":" << clock << "> " << msg << " wine:" << wineAmount << endl;
+    cout << "W " << myRank << ":" << clock << "> " << msg << " wine:" << wineAmount << endl;
 }
 
 void Winer::sendMsg(Msg *msg, int destinationRank, int tag) {
