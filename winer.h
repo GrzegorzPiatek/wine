@@ -5,7 +5,7 @@
 #include <chrono>
 #include <mutex>
 #include "constants.h" 
-#include <mpi.h> //Zły kompilator wpięty w IDE
+#include <mpi.h>
 #include <cstdlib>
 #include <time.h>
 #include <vector>
@@ -23,8 +23,6 @@ private:
 
     mutex ackMutex;
     int ackCounter = 0;
-
-    mutex inSafePlaceMtx;
 
     int wineAmount;
 
@@ -75,9 +73,6 @@ public:
 
 Winer::Winer(int rank, int winers, int students, int safePlaces){
     init(rank, winers, students, safePlaces);
-    clock = 1;
-    // mainThreadWiner = new thread(&Winer::threadMainWiner,this);
-
     communicationThreadWiner = new thread(&Winer::threadCommunicateWiner,this);
     threadMainWiner();
 }
@@ -91,7 +86,7 @@ void Winer::init(int rank, int winers, int students, int safePlaces) {
 
     pendingRequests.resize(STUDENTS);
     fill(pendingRequests.begin(), pendingRequests.end(), 0);
-    
+    clock = 1;
     wineAmount = 0;
     ackCounter = 0;
     haveWine = false;
@@ -99,19 +94,13 @@ void Winer::init(int rank, int winers, int students, int safePlaces) {
 }
 
 void Winer::threadMainWiner(){
-    // log("inside main thread");
-
     while(true){
         log("PRODUKUJE");
         makeWine();
         srand(time(NULL));
-        // log("after makeWine()");
-        broadCastWiners(); //Zapytanie winiarzy o bm
+        broadCastWiners();
         log("Czekam na zgode");
-        // inSafePlaceMtx.lock();
         safePlace();
-        // inSafePlaceMtx.unlock();  
-        // log("after safePlace()"); 
     }
 }
 
@@ -147,9 +136,8 @@ void Winer::winerReqHandler(Msg msg, int sourceRank){
 void Winer::winerAckHandler(Msg msg){
     if (msg.clockT == lastReqClock){
         incrementAck();
-        if (ackCounter == MIN_ACK){ //Wzór z kartki z algorytmem 
+        if (ackCounter == MIN_ACK){
             //Wejście do bezpiecznego miejsca
-            // inSafePlaceMtx.unlock();
             // log("        ### MAM ACK");
             sleep(2);
             sendAck(myRank, clock);
@@ -206,7 +194,6 @@ void Winer::sendAckToRest(){
 void Winer::incrementAck(){
     ackMutex.lock();
     ackCounter ++;
-    // log("Increment ACK" + to_string(ackCounter));
     ackMutex.unlock();
 }
 

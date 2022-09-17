@@ -12,7 +12,6 @@
 #include <vector>
 
 using namespace std;
-// extern int myRank, maxRank; //set it in main.cpp
 extern MPI_Datatype MPI_MSG_TYPE;
 
 class Student {
@@ -31,8 +30,7 @@ private:
 
     int myTargetOffer;
 
-    // first places just 0 for winers - never used
-    vector<int> pendingRequests; 
+    vector<int> pendingRequests;
     mutex exchangeMtx;
 
     MPI_Status status;
@@ -90,7 +88,6 @@ public:
 
 Student::Student(int rank, int students, int winers) {
     init(rank, students, winers);
-    clock = 1;
     communicateThread = new thread(&Student::threadCommunicate, this);
     threadMain();
 }
@@ -100,13 +97,13 @@ void Student::init(int rank, int students, int winers) {
     STUDENTS = students;
     WINE_MAKERS = winers;
     maxRank = STUDENTS + WINE_MAKERS;
-
     wineOffers.resize(STUDENTS);
     fill(wineOffers.begin(), wineOffers.end(), 0);
 
     pendingRequests.resize(STUDENTS);
     fill(pendingRequests.begin(), pendingRequests.end(), 0);
-
+    
+    clock = 1;
     wine = 0;
     ackCounter = 0;
     needWine = false;
@@ -123,11 +120,9 @@ void Student::threadMain() {
             sleepAndSetWine();
             srand(time(NULL));
         }
-        // log("after sleepAndSetWine()");
         sendReqToStudents();
         log("Czekam na zgody");
         exchange();
-        // log("after exchange()");
     }
 }
 
