@@ -7,10 +7,10 @@
 #define EXCHANGE 4
 #define WINE 5
 
-#define WINE_MAKERS 3
-#define STUDENTS 3
+// #define WINE_MAKERS 2
+// #define STUDENTS 2
 
-#define SAFE_PLACES 1
+// #define SAFE_PLACES 1
 
 #define MIN_ACK WINE_MAKERS - SAFE_PLACES
 
@@ -27,5 +27,8 @@ struct Msg {
     int targetOffer;
     int wine;
 };
+
+// extern int STUDENTS, WINE_MAKERS, SAFE_PLACES;
+
 
 #endif //CONSTANTS_H

@@ -8,14 +8,16 @@
 #include <mpi.h> //Zły kompilator wpięty w IDE
 #include <cstdlib>
 #include <time.h>
+#include <vector>
 
 
 using namespace std;
-extern int myRank,maxRank;
+
 extern MPI_Datatype MPI_MSG_TYPE;
 
 class Winer{
 private:
+    int STUDENTS, WINE_MAKERS, SAFE_PLACES, myRank, maxRank;
     mutex clockMtx;
     int clock;
 
@@ -26,16 +28,18 @@ private:
 
     int wineAmount;
 
-    int pendingRequests[WINE_MAKERS] = {0};
+    vector<int> pendingRequests; 
 
     MPI_Status status;
 
     int lastReqClock = 0;
 
-    bool haveWine = false;
+    bool haveWine;
 
 protected:
-    thread *mainThreadWiner, *communicationThreadWiner;
+    thread *communicationThreadWiner;
+
+    void init(int rank, int winers, int students, int safePlaces);
 
     void threadMainWiner();
 
@@ -66,17 +70,32 @@ protected:
     void sendMsg(Msg *msg, int destinationRank, int tag);
 
 public:
-    Winer();
+    Winer(int rank, int winers, int students, int safePlaces);
 };
 
-Winer::Winer(){
-    cout << "WINIARZ: " << "myRank: " << myRank << "maxRank: " << maxRank << endl;
-
+Winer::Winer(int rank, int winers, int students, int safePlaces){
+    init(rank, winers, students, safePlaces);
     clock = 1;
     // mainThreadWiner = new thread(&Winer::threadMainWiner,this);
 
     communicationThreadWiner = new thread(&Winer::threadCommunicateWiner,this);
     threadMainWiner();
+}
+
+void Winer::init(int rank, int winers, int students, int safePlaces) {
+    myRank = rank;
+    STUDENTS = students;
+    WINE_MAKERS = winers;
+    SAFE_PLACES = safePlaces;
+    maxRank = STUDENTS + WINE_MAKERS;
+
+    pendingRequests.resize(STUDENTS);
+    fill(pendingRequests.begin(), pendingRequests.end(), 0);
+    
+    wineAmount = 0;
+    ackCounter = 0;
+    haveWine = false;
+    cout << "WINE MAKER " <<"myRank: " << myRank << endl;
 }
 
 void Winer::threadMainWiner(){

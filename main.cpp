@@ -37,11 +37,12 @@ void registerMsgDatatype() {
 
 int main(int argc, char *argv[])
 {
-    // {
-    //     int i=0;
-    //     while( i == 0)
-    //     sleep(5);
+    // for (int i = 0; i < argc; i++ ) {
+    //     cout << i << ": " << argv[i] << endl;
     // }
+    int numberOfWineMakers = atoi(argv[1]);
+    int numberOfStudents = atoi(argv[2]);
+    int numberOfSafePlaces = atoi(argv[3]);
 
     int rank, size, provided;    
     MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
@@ -49,14 +50,18 @@ int main(int argc, char *argv[])
 
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    if((numberOfStudents + numberOfWineMakers) != size) {
+        throw invalid_argument("MPI size is not equal to number of students and wine makers!");
+    }    
     myRank = rank;
     maxRank = size;
-    if (myRank < WINE_MAKERS)
-        Winer winer;
+
+    if (myRank < numberOfWineMakers)
+        Winer winer(myRank, numberOfWineMakers, numberOfStudents, numberOfSafePlaces);
     else
-    {
-        Student student;
-    }
+        Student student(myRank, numberOfStudents, numberOfWineMakers);
+    
     MPI_Finalize();
     return 0;
 }

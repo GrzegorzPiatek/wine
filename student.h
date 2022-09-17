@@ -9,37 +9,42 @@
 #include <cstdlib>
 #include <time.h>
 #include <algorithm>
+#include <vector>
 
 using namespace std;
-extern int myRank, maxRank; //set it in main.cpp
+// extern int myRank, maxRank; //set it in main.cpp
 extern MPI_Datatype MPI_MSG_TYPE;
 
 class Student {
 private:
+    int STUDENTS, WINE_MAKERS, myRank, maxRank;
     mutex clockMtx;
     int clock;
 
     mutex ackMtx;
-    int ackCounter = 0;
+    int ackCounter;
 
     int requestedOffer;
-    int wine = 0;
+    int wine;
 
-    int wineOffers[WINE_MAKERS] = {0};
+    vector<int> wineOffers;
+
     int myTargetOffer;
 
-    //first places just 0 for winers - never used
-    int pendingRequests[STUDENTS+WINE_MAKERS] = {0}; 
+    // first places just 0 for winers - never used
+    vector<int> pendingRequests; 
     mutex exchangeMtx;
 
     MPI_Status status;
     
-    bool needWine = false;
+    bool needWine;
 
     int pendingUpdatesCounter = 0;
 
 protected:
-    thread *mainThread, *communicateThread;
+    thread *communicateThread;
+
+    void init(int myRank, int students, int winers);
 
     void threadMain();
 
@@ -80,17 +85,34 @@ protected:
     void updatePendingUpdates(int value);
 
 public:
-    Student();
+    Student(int rank, int students, int winers);
 };
 
-Student::Student() {
-    cout <<"STUDENT: " <<"myRank: " << myRank << "maxRank: " << maxRank << endl;
-
+Student::Student(int rank, int students, int winers) {
+    init(rank, students, winers);
     clock = 1;
-    // mainThread = new thread(&Student::threadMain, this);
     communicateThread = new thread(&Student::threadCommunicate, this);
     threadMain();
 }
+
+void Student::init(int rank, int students, int winers) {
+    myRank = rank;
+    STUDENTS = students;
+    WINE_MAKERS = winers;
+    maxRank = STUDENTS + WINE_MAKERS;
+
+    wineOffers.resize(STUDENTS);
+    fill(wineOffers.begin(), wineOffers.end(), 0);
+
+    pendingRequests.resize(STUDENTS);
+    fill(pendingRequests.begin(), pendingRequests.end(), 0);
+
+    wine = 0;
+    ackCounter = 0;
+    needWine = false;
+    cout << "STUDENT " <<"myRank: " << myRank << endl;
+}
+
 
 void Student::threadMain() {
     log("inside main thread");
