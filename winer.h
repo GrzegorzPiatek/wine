@@ -67,6 +67,8 @@ protected:
 
     void sendMsg(Msg *msg, int destinationRank, int tag);
 
+    void lamport(int msgClock);
+
 public:
     Winer(int rank, int winers, int students, int safePlaces);
 };
@@ -110,6 +112,7 @@ void Winer::threadCommunicateWiner(){
     while(true){
         // if(wineAmount == 0) inSafePlaceMtx.lock();
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+        lamport(msg.clockT);
         log("@@ Recv " + to_string(status.MPI_TAG) + " from " + to_string(status.MPI_SOURCE));
         if(status.MPI_SOURCE == myRank){
             haveWine = true;
@@ -129,6 +132,7 @@ void Winer::threadCommunicateWiner(){
 void Winer::winerReqHandler(Msg msg, int sourceRank){
     if (!haveWine || clock > msg.clockT || (clock == msg.clockT && myRank > sourceRank)){
         sendAck(sourceRank,msg.clockT);
+        incrementClock();
     }
     else pendingRequests[sourceRank]=msg.clockT;
 }
@@ -142,6 +146,7 @@ void Winer::winerAckHandler(Msg msg){
             sleep(2);
             sendAck(myRank, clock);
             MPI_Recv(&msg, 1, MPI_MSG_TYPE, myRank, REQ, MPI_COMM_WORLD, &status);
+            //Sam do siebie lamport nie robiony
             resetAck();
         }
     }
@@ -151,6 +156,7 @@ void Winer::safePlace(){
     //Wysyłka do studentów o ilości wina jaką mam
     Msg msg;
     MPI_Recv(&msg, 1, MPI_MSG_TYPE, myRank, ACK, MPI_COMM_WORLD, &status);
+    lamport(msg.clockT);
     msg.wine = wineAmount;
     msg.clockT = clock;
     // clockMtx.lock();
@@ -159,12 +165,14 @@ void Winer::safePlace(){
         // log("In safePlace | Send to student: " + to_string(i));
         sendMsg(&msg, i, WINE);
     }
+
     // clock++;
     // clockMtx.unlock();
     
     while (wineAmount > 0){
         //Czekanie na potwierdzenie wymiany od studenta
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, EXCHANGE, MPI_COMM_WORLD, &status);
+        lamport(msg.clockT);
         wineAmount -= msg.wine;
         log("Oddałem wina " + to_string(msg.wine) + " Studentowi " + to_string(status.MPI_SOURCE));
     }
@@ -189,6 +197,7 @@ void Winer::sendAckToRest(){
             pendingRequests[i]=0; //resetujemy po wysłaniu
         }
     }
+    incrementClock();
 }
 
 void Winer::incrementAck(){
@@ -220,6 +229,7 @@ void Winer::broadCastWiners(){ //Wybieranie przez zegar nic więcej
         sendMsg(&msg, i, REQ);
     }
     lastReqClock = clock;
+    incrementClock();
     // clock++;
     // clockMtx.unlock();
 }
@@ -244,4 +254,10 @@ void Winer::sendMsg(Msg *msg, int destinationRank, int tag) {
         MPI_COMM_WORLD
     );
     // log("Send: " + to_string(tag) + " to" + to_string(destinationRank));
+}
+
+void Winer::lamport(int msgClock){
+    clockMtx.lock();
+    clock = max(clock,msgClock)+1;
+    clockMtx.unlock();
 }
