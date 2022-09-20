@@ -228,7 +228,6 @@ void Winer::broadCastWiners(){ //Wybieranie przez zegar nic więcej
         sendMsg(&msg, i, REQ);
     }
     clockMtx.unlock();
-    Msg msg;
     sendMsg(&msg, myRank, REQ); // do siebie zeby zmienic haveWinena true
 }
 

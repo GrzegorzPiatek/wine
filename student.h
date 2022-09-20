@@ -147,7 +147,7 @@ void Student::threadCommunicate() {
             }
             else if (status.MPI_TAG == UPD) {
                 updateOffer(msg.targetOffer, msg.wine);
-                // updatePendingUpdates(-1);
+                updatePendingUpdates(-1);
             }
         }
         else { // msg from wine maker
@@ -163,7 +163,7 @@ void Student::studentReqHandler(Msg msg, int sourceRank) {
     if(!needWine || clock > msg.clockT || (clock == msg.clockT && myRank > sourceRank)) {
         incrementClock();
         sendAck(sourceRank);
-        // updatePendingUpdates(1);
+        updatePendingUpdates(1);
     }
     else {
         pendingRequests[sourceRank] = 1;
@@ -178,14 +178,11 @@ void Student::studentReqHandler(Msg msg, int sourceRank) {
 void Student::studentAckHandler(Msg msg) {
     incrementAck();
     if(ackCounter == STUDENTS -1) {
-        // exchangeMtx.unlock();
-        // log("        ### MAM ACK");
-        // sleep(2);
-        // while(pendingUpdatesCounter){
-        //     MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, UPD, MPI_COMM_WORLD, &status);
-        //     updateOffer(msg.targetOffer, msg.wine);
-            // updatePendingUpdates(-1);
-        // }
+        while(pendingUpdatesCounter){
+            MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, UPD, MPI_COMM_WORLD, &status);
+            updateOffer(msg.targetOffer, msg.wine);
+            updatePendingUpdates(-1);
+        }
         sendAck(myRank);
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, myRank, REQ, MPI_COMM_WORLD, &status);
         lamport(msg.clockT);
@@ -312,6 +309,8 @@ void Student::sleepAndSetWine() {
     this_thread::sleep_for(chrono::seconds(rand() % (MAX_TIME_WAIT) + MIN_TIME_WAIT));
     // sleep(1);
     wine = rand() % (MAX_WINE) + 1;
+    Msg msg;
+    sendMsg(&msg, myRank, REQ);
 }
 
 int Student::chooseOffer() {
@@ -346,7 +345,7 @@ void Student::log(string msg) {
 }
 
 void Student::sendMsg(Msg *msg, int destinationRank, int tag) {
-    msg.clockT = clock;
+    msg->clockT = clock;
     MPI_Send(
         msg,
         1,
