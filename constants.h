@@ -26,6 +26,7 @@ struct Msg {
     int clockT;
     int targetOffer;
     int wine;
+    int criticCounter;
 };
 
 // extern int STUDENTS, WINE_MAKERS, SAFE_PLACES;

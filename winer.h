@@ -30,7 +30,7 @@ private:
 
     MPI_Status status;
 
-    int lastReqClock = 0;
+    int criticCounter = 0;
 
     bool haveWine;
 
@@ -110,13 +110,12 @@ void Winer::threadCommunicateWiner(){
     Msg msg;
     log("inside communicate thread");
     while(true){
-        // if(wineAmount == 0) inSafePlaceMtx.lock();
         MPI_Recv(&msg, 1, MPI_MSG_TYPE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
         lamport(msg.clockT);
         log("@@ Recv " + to_string(status.MPI_TAG) + " from " + to_string(status.MPI_SOURCE));
         if(status.MPI_SOURCE == myRank){
             haveWine = true;
-        };        // log("recv" + to_string(status.MPI_TAG));
+        }; 
         
         if (status.MPI_SOURCE < WINE_MAKERS){ //Komunikacja między winiarzami
             if (status.MPI_TAG == REQ){
@@ -130,20 +129,19 @@ void Winer::threadCommunicateWiner(){
 }
 
 void Winer::winerReqHandler(Msg msg, int sourceRank){
-    if (!haveWine || clock > msg.clockT || (clock == msg.clockT && myRank > sourceRank)){
-        sendAck(sourceRank,msg.clockT);
+    if (!haveWine || criticCounter > msg.criticCounter || (clock == msg.criticCounter && myRank > sourceRank)){
         incrementClock();
+        sendAck(sourceRank,msg.criticCounter);
     }
     else pendingRequests[sourceRank]=msg.clockT;
 }
 
 void Winer::winerAckHandler(Msg msg){
-    if (msg.clockT == lastReqClock){
+    if (msg.criticCounter == criticCounter){
         incrementAck();
         if (ackCounter == MIN_ACK){
             //Wejście do bezpiecznego miejsca
-            // log("        ### MAM ACK");
-            sleep(2);
+            log(" MAM ACK");
             sendAck(myRank, clock);
             MPI_Recv(&msg, 1, MPI_MSG_TYPE, myRank, REQ, MPI_COMM_WORLD, &status);
             //Sam do siebie lamport nie robiony
@@ -156,18 +154,16 @@ void Winer::safePlace(){
     //Wysyłka do studentów o ilości wina jaką mam
     Msg msg;
     MPI_Recv(&msg, 1, MPI_MSG_TYPE, myRank, ACK, MPI_COMM_WORLD, &status);
-    lamport(msg.clockT);
     msg.wine = wineAmount;
+    clockMtx.lock();
+    clock++;
     msg.clockT = clock;
-    // clockMtx.lock();
     log("Mam bezpieczne miejsce");
     for (int i = WINE_MAKERS;i<maxRank;i++){
         // log("In safePlace | Send to student: " + to_string(i));
         sendMsg(&msg, i, WINE);
     }
-
-    // clock++;
-    // clockMtx.unlock();
+    clockMtx.unlock();
     
     while (wineAmount > 0){
         //Czekanie na potwierdzenie wymiany od studenta
@@ -181,9 +177,10 @@ void Winer::safePlace(){
     sendMsg(&msg, myRank,REQ);
 }
 
-void Winer::sendAck(int destinationRank, int requestClock){
+void Winer::sendAck(int destinationRank, int cCounter){
     Msg msg;
-    msg.clockT = requestClock;
+    msg.criticCounter = cCounter;
+    msg.clockT = clock;
     // log("Sending ACK to:  " + to_string(destinationRank));
     sendMsg(&msg, destinationRank, ACK);
     // incrementClock();
@@ -220,18 +217,19 @@ void Winer::incrementClock(){
 
 
 void Winer::broadCastWiners(){ //Wybieranie przez zegar nic więcej
-    // clockMtx.lock();
+    clockMtx.lock();
     Msg msg;
+    clock++;
     msg.clockT = clock;
+    msg.criticCounter = criticCounter;
     for (int i = 0 ;i<WINE_MAKERS;i++){
         if (i==myRank) continue;
         // log("in broadCastWiners | Send to " + to_string(i));
         sendMsg(&msg, i, REQ);
     }
-    lastReqClock = clock;
-    incrementClock();
-    // clock++;
-    // clockMtx.unlock();
+    clockMtx.unlock();
+    Msg msg;
+    sendMsg(&msg, myRank, REQ); // do siebie zeby zmienic haveWinena true
 }
 
 void Winer::makeWine(){

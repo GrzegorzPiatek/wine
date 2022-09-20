@@ -21,14 +21,15 @@ void registerMsgDatatype() {
        brzydzimy się czymś w rodzaju MPI_Send(&typ, sizeof(pakiet_t), MPI_BYTE....
     */
     /* sklejone z stackoverflow */
-    const int FIELD_NO = 3;
-    int       blocklengths[FIELD_NO] = {1,1,1};
-    MPI_Datatype typy[FIELD_NO] = {MPI_INT, MPI_INT, MPI_INT};
+    const int FIELD_NO = 4;
+    int       blocklengths[FIELD_NO] = {1,1,1,1};
+    MPI_Datatype typy[FIELD_NO] = {MPI_INT, MPI_INT, MPI_INT, MPI_INT};
 
     MPI_Aint     offsets[FIELD_NO]; 
     offsets[0] = offsetof(Msg, clockT);
     offsets[1] = offsetof(Msg, targetOffer);
     offsets[2] = offsetof(Msg, wine);
+    offsets[3] = offsetof(Msg, criticCounter);
 
     MPI_Type_create_struct(FIELD_NO, blocklengths, offsets, typy, &MPI_MSG_TYPE);
     MPI_Type_commit(&MPI_MSG_TYPE);

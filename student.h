@@ -126,7 +126,6 @@ void Student::threadMain() {
         log("Czekam na zgody");
         exchange();
     }
-    incrementClock();
 }
 
 void Student::threadCommunicate() {
@@ -162,8 +161,8 @@ void Student::threadCommunicate() {
 
 void Student::studentReqHandler(Msg msg, int sourceRank) {
     if(!needWine || clock > msg.clockT || (clock == msg.clockT && myRank > sourceRank)) {
-        sendAck(sourceRank);
         incrementClock();
+        sendAck(sourceRank);
         // updatePendingUpdates(1);
     }
     else {
@@ -212,8 +211,8 @@ void Student::exchange() {
     sendAckToPendingRequests();
     resetAck();
     // exchangeMtx.unlock();
-    sendMsg(&msg,myRank, REQ);
     incrementClock();
+    sendMsg(&msg,myRank, REQ);
 }
 
 void Student::updatePendingUpdates(int value) {
@@ -256,46 +255,47 @@ void Student::updateOffer(int id, int wine) {
 void Student::sendAck(int destinationRank) {
     Msg msg;
     msg.clockT = clock;
+    incrementClock();
     sendMsg(&msg, destinationRank, ACK);
-    //incrementClock();
 }
 
 void Student::sendAckToPendingRequests() {
+    incrementClock();
     for (int i = WINE_MAKERS; i < maxRank; i++) {
         if (pendingRequests[i]){
             sendAck(i);
         }
     }
-    incrementClock();
 }
 
 void Student::sendExchangeToWineMaker(int destinationRank, int exchangeWine) {
     Msg msg;
+    incrementClock();
     msg.clockT = clock;
     msg.wine = exchangeWine;
     log("SEND TO WINER " + to_string(destinationRank) + "  WINE_EXCHANGE " + to_string(exchangeWine));
     sendMsg(&msg, destinationRank, EXCHANGE);
-    incrementClock();
 }
 
 
 void Student::sendReqToStudents() {
     // log("Send req to all students");
-    // clockMtx.lock();
+    clockMtx.lock();
+    clock++;
     Msg msg;
     msg.clockT = clock;
     for (int i = WINE_MAKERS; i < maxRank; i++) {
         if (i==myRank) continue;
         sendMsg(&msg, i, REQ);
     }
-    incrementClock();
-    // clock++;
-    // clockMtx.unlock();
+    // incrementClock();
+    clockMtx.unlock();
 }
 
 void Student::sendUpdToStudents(int wineMaker, int wine) {
     // log("SendUpdToSudents");
-    // clockMtx.lock();
+    clockMtx.lock();
+    clock++;
     Msg msg;
     msg.clockT = clock;
     msg.targetOffer = wineMaker;
@@ -304,9 +304,8 @@ void Student::sendUpdToStudents(int wineMaker, int wine) {
         if (i==myRank) continue;
         sendMsg(&msg, i, UPD);
     }
-    incrementClock();
-    // clock++;
-    // clockMtx.unlock();
+    // incrementClock();
+    clockMtx.unlock();
 }
 
 void Student::sleepAndSetWine() {
@@ -347,6 +346,7 @@ void Student::log(string msg) {
 }
 
 void Student::sendMsg(Msg *msg, int destinationRank, int tag) {
+    msg.clockT = clock;
     MPI_Send(
         msg,
         1,
